@@ -1,0 +1,132 @@
+# Render Blueprint: Python worker (FastAPI HTTP service + 3 daily cron jobs).
+# Apply via Render Dashboard -> New + -> Blueprint -> connect this repo.
+
+services:
+  # ---------- HTTP service (FastAPI) ----------
+  - type: web
+    name: ugc-creator-os-worker
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r worker/requirements.txt
+    startCommand: uvicorn worker.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SHORTIMIZE_API_KEY
+        sync: false
+      - key: WORKER_SECRET
+        sync: false
+      - key: SHORTIMIZE_BASE_URL
+        value: https://api.shortimize.com
+      - key: CRON_HOUR_1_UTC
+        value: "7"
+      - key: CRON_HOUR_2_UTC
+        value: "19"
+      - key: CRON_HOUR_DAILY_ET
+        value: "18"
+      - key: TZ
+        value: America/New_York
+
+  # ---------- Cron jobs ----------
+  # Each cron inherits the four secret env vars from the web service above
+  # via fromService. The local `key` is required by Render's schema even when
+  # using fromService.envVarKey.
+
+  - type: cron
+    name: ugc-creator-os-morning
+    runtime: python
+    region: oregon
+    schedule: "15 7 * * *"        # 07:15 UTC daily; 1 hr after Shortimize ~06:15 refresh
+    buildCommand: |
+      pip install -r worker/requirements.txt
+    startCommand: python -m worker.cron_runner morning
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: NEXT_PUBLIC_SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SUPABASE_SERVICE_ROLE_KEY
+      - key: SHORTIMIZE_API_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SHORTIMIZE_API_KEY
+      - key: WORKER_SECRET
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: WORKER_SECRET
+
+  - type: cron
+    name: ugc-creator-os-evening
+    runtime: python
+    region: oregon
+    schedule: "15 19 * * *"       # 19:15 UTC daily; 1 hr after Shortimize ~18:15 refresh
+    buildCommand: |
+      pip install -r worker/requirements.txt
+    startCommand: python -m worker.cron_runner evening
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: NEXT_PUBLIC_SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SUPABASE_SERVICE_ROLE_KEY
+      - key: SHORTIMIZE_API_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SHORTIMIZE_API_KEY
+      - key: WORKER_SECRET
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: WORKER_SECRET
+
+  - type: cron
+    name: ugc-creator-os-daily
+    runtime: python
+    region: oregon
+    # 6 PM ET daily. We pick 23:00 UTC so we never fire EARLIER than 6 PM ET;
+    # in EDT it fires at 7 PM ET (still fine). The is_snapshot_day() check
+    # in cycles.py uses ET dates so the day boundary is correct.
+    schedule: "0 23 * * *"
+    buildCommand: |
+      pip install -r worker/requirements.txt
+    startCommand: python -m worker.cron_runner daily
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: NEXT_PUBLIC_SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SUPABASE_SERVICE_ROLE_KEY
+      - key: SHORTIMIZE_API_KEY
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: SHORTIMIZE_API_KEY
+      - key: WORKER_SECRET
+        fromService:
+          type: web
+          name: ugc-creator-os-worker
+          envVarKey: WORKER_SECRET
